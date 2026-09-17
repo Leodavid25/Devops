@@ -88,7 +88,7 @@ stages:
   - stage: Package
     displayName: 'Package & push image'
     dependsOn: Test
-    condition: succeeded()
+    condition: and(succeeded(), eq('${{ parameters.imageTag }}', 'auto'))
     jobs:
       - job: DockerBuildPush
         pool:
@@ -141,7 +141,7 @@ stages:
   - stage: DeployDev
     displayName: 'Deploy to dev'
     dependsOn: Package
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+    condition: and(in(dependencies.Package.result, 'Succeeded', 'Skipped'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
     jobs:
       - deployment: DeployDev
         environment: 'dev'
@@ -159,7 +159,7 @@ stages:
   - stage: DeployTest
     displayName: 'Deploy to test'
     dependsOn: Package
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/testing'))
+    condition: and(in(dependencies.Package.result, 'Succeeded', 'Skipped'), eq(variables['Build.SourceBranch'], 'refs/heads/testing'))
     jobs:
       - deployment: DeployTest
         environment: 'test'
@@ -177,7 +177,7 @@ stages:
   - stage: DeployProd
     displayName: 'Deploy to prod'
     dependsOn: Package
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    condition: and(in(dependencies.Package.result, 'Succeeded', 'Skipped'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - deployment: DeployProd
         environment: 'prod'
