@@ -6,9 +6,18 @@ namespace: devops-prod
 resources:
   - ../../base
   - namespace.yaml
+  - ingress.yaml
 
+patches:
+  - target:
+      kind: Service
+      name: devops-microservice
+    patch: |
+      - op: replace
+        path: /spec/type
+        value: ClusterIP
 
 images:
   - name: PLACEHOLDER/devops-microservice
-    newName: REPLACE_WITH_ACR_LOGIN_SERVER/devops-microservice
+    newName: acrdevopsp5dvy7.azurecr.io/devops-microservice
     newTag: latest
