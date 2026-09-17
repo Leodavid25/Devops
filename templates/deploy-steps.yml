@@ -1,0 +1,58 @@
+parameters:
+  - name: environmentName
+    type: string
+  - name: imageTag
+    type: string
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Deploy devops-microservice to ${{ parameters.environmentName }}'
+    inputs:
+      azureSubscription: 'arm-devops'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -euo pipefail
+
+        NAMESPACE="devops-${ENVIRONMENT_NAME}"
+        IMAGE="${ACR_LOGIN_SERVER}/devops-microservice:${IMAGE_TAG}"
+
+        az aks get-credentials \
+          --resource-group "${AKS_RESOURCE_GROUP}" \
+          --name "${AKS_NAME}" \
+          --overwrite-existing
+
+        kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+        JWT_SECRET_VALUE=$(az keyvault secret show \
+          --vault-name "${KEY_VAULT_NAME}" \
+          --name "jwt-secret-${ENVIRONMENT_NAME}" \
+          --query value -o tsv)
+
+        kubectl create secret generic devops-secrets \
+          --namespace "${NAMESPACE}" \
+          --from-literal=api-key="${API_KEY}" \
+          --from-literal=jwt-secret="${JWT_SECRET_VALUE}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+        kubectl apply -k "kubernetes/overlays/${ENVIRONMENT_NAME}"
+
+        kubectl set image "deployment/devops-microservice" \
+          "devops-microservice=${IMAGE}" \
+          --namespace "${NAMESPACE}"
+
+        kubectl rollout status "deployment/devops-microservice" \
+          --namespace "${NAMESPACE}" \
+          --timeout=180s
+
+        echo "Public IP:"
+        kubectl get svc devops-microservice --namespace "${NAMESPACE}" \
+          -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+      env:
+        ENVIRONMENT_NAME: '${{ parameters.environmentName }}'
+        IMAGE_TAG: '${{ parameters.imageTag }}'
+        ACR_LOGIN_SERVER: '$(acrLoginServer)'
+        AKS_RESOURCE_GROUP: '$(aksResourceGroup)'
+        AKS_NAME: '$(aksName)'
+        KEY_VAULT_NAME: '$(keyVaultName)'
+        API_KEY: '$(apiKey)'
