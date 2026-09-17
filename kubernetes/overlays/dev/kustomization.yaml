@@ -10,5 +10,5 @@ resources:
 
 images:
   - name: PLACEHOLDER/devops-microservice
-    newName: REPLACE_WITH_ACR_LOGIN_SERVER/devops-microservice
-    newTag: latest
+    newName: acrdevopsp5dvy7.azurecr.io/devops-microservice
+    newTag: manual-test

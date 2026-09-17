@@ -17,6 +17,7 @@ terraform {
 
 provider "azurerm" {
   features {}
+  skip_provider_registration = true
 }
 
 data "azurerm_client_config" "current" {}
@@ -86,6 +87,13 @@ resource "azurerm_role_assignment" "kv_admin_current" {
   scope                = azurerm_key_vault.kv.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_role_assignment" "kv_pipeline_reader" {
+  count                = var.pipeline_service_principal_object_id != "" ? 1 : 0
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = var.pipeline_service_principal_object_id
 }
 
 resource "random_password" "jwt_secret" {
