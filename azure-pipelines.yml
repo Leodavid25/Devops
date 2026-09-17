@@ -95,17 +95,17 @@ stages:
           vmImage: 'ubuntu-latest'
         steps:
           - task: AzureCLI@2
-            displayName: 'az acr build (build + push to ACR)'
+            displayName: 'docker build + az acr login + docker push'
             inputs:
               azureSubscription: 'arm-devops'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
-                az acr build \
-                  --registry "$(acrName)" \
-                  --image "devops-microservice:$(resolvedTag)" \
-                  .
+                IMAGE="$(acrLoginServer)/devops-microservice:$(resolvedTag)"
+                docker build -t "$IMAGE" .
+                az acr login --name "$(acrName)"
+                docker push "$IMAGE"
 
   - stage: Infra
     displayName: 'Terraform (platform)'
@@ -116,9 +116,6 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - task: TerraformInstaller@1
-            inputs:
-              terraformVersion: '1.16.2'
           - task: AzureCLI@2
             displayName: 'terraform init/plan/apply'
             inputs:
@@ -128,6 +125,10 @@ stages:
               addSpnToEnvironment: true
               inlineScript: |
                 set -e
+                TF_VERSION=1.16.2
+                curl -sSL "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip
+                sudo unzip -o /tmp/terraform.zip -d /usr/local/bin
+                terraform -version
                 export ARM_CLIENT_ID=$servicePrincipalId
                 export ARM_CLIENT_SECRET=$servicePrincipalKey
                 export ARM_TENANT_ID=$tenantId
