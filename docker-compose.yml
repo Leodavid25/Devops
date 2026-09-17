@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    networks:
+      - devops-net
+
+  devops-app-1:
+    build: .
+    environment:
+      - API_KEY=${API_KEY:-2f5ae96c-b558-4c7b-a590-a501ae1c3f6c}
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production-please-0123456789}
+      - REDIS_HOST=redis
+    expose:
+      - "8080"
+    depends_on:
+      - redis
+    networks:
+      - devops-net
+
+  devops-app-2:
+    build: .
+    environment:
+      - API_KEY=${API_KEY:-2f5ae96c-b558-4c7b-a590-a501ae1c3f6c}
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production-please-0123456789}
+      - REDIS_HOST=redis
+    expose:
+      - "8080"
+    depends_on:
+      - redis
+    networks:
+      - devops-net
+
+  nginx-lb:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - devops-app-1
+      - devops-app-2
+    networks:
+      - devops-net
+
+networks:
+  devops-net:
+    driver: bridge

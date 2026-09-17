@@ -1,0 +1,193 @@
+trigger:
+  branches:
+    include:
+      - develop
+      - testing
+      - main
+  paths:
+    exclude:
+      - '**/*.md'
+
+pr:
+  branches:
+    include:
+      - main
+
+parameters:
+  - name: imageTag
+    displayName: 'Image tag to build/deploy (leave default to build a new one from the current commit)'
+    type: string
+    default: 'auto'
+  - name: runTerraform
+    displayName: 'Run terraform apply on terraform/platform'
+    type: boolean
+    default: false
+
+variables:
+  - group: devops-platform
+  - name: mavenCacheFolder
+    value: $(Pipeline.Workspace)/.m2/repository
+  - name: resolvedTag
+    ${{ if eq(parameters.imageTag, 'auto') }}:
+      value: '$(Build.SourceBranchName)-$(Build.SourceVersion)'
+    ${{ else }}:
+      value: '${{ parameters.imageTag }}'
+
+stages:
+  - stage: Build
+    displayName: 'Build'
+    jobs:
+      - job: Compile
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: Cache@2
+            inputs:
+              key: 'maven | "$(Agent.OS)" | pom.xml'
+              restoreKeys: 'maven | "$(Agent.OS)"'
+              path: $(mavenCacheFolder)
+            displayName: 'Cache Maven dependencies'
+          - task: Maven@3
+            displayName: 'Dependency management (go-offline)'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              options: '-B -Dmaven.repo.local=$(mavenCacheFolder)'
+              goals: 'dependency:go-offline'
+          - task: Maven@3
+            displayName: 'Compile'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              options: '-B -Dmaven.repo.local=$(mavenCacheFolder)'
+              goals: 'compile'
+
+  - stage: Test
+    displayName: 'Test'
+    dependsOn: Build
+    jobs:
+      - job: VerifyAndAnalyze
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: Cache@2
+            inputs:
+              key: 'maven | "$(Agent.OS)" | pom.xml'
+              restoreKeys: 'maven | "$(Agent.OS)"'
+              path: $(mavenCacheFolder)
+            displayName: 'Cache Maven dependencies'
+          - task: Maven@3
+            displayName: 'mvn verify (tests + JaCoCo >=80% + Checkstyle + SpotBugs)'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              options: '-B -Dmaven.repo.local=$(mavenCacheFolder)'
+              goals: 'verify'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              codeCoverageToolOption: 'JaCoCo'
+              codeCoverageClassFilter: '+:com.devops.*'
+
+  - stage: Package
+    displayName: 'Package & push image'
+    dependsOn: Test
+    condition: succeeded()
+    jobs:
+      - job: DockerBuildPush
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'docker build + az acr login + docker push'
+            inputs:
+              azureSubscription: 'arm-devops'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+                IMAGE="$(acrLoginServer)/devops-microservice:$(resolvedTag)"
+                docker build -t "$IMAGE" .
+                az acr login --name "$(acrName)"
+                docker push "$IMAGE"
+
+  - stage: Infra
+    displayName: 'Terraform (platform)'
+    dependsOn: Package
+    condition: and(succeeded(), eq('${{ parameters.runTerraform }}', 'True'))
+    jobs:
+      - job: TerraformApply
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'terraform init/plan/apply'
+            inputs:
+              azureSubscription: 'arm-devops'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -e
+                TF_VERSION=1.16.2
+                curl -sSL "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip
+                sudo unzip -o /tmp/terraform.zip -d /usr/local/bin
+                terraform -version
+                export ARM_CLIENT_ID=$servicePrincipalId
+                export ARM_CLIENT_SECRET=$servicePrincipalKey
+                export ARM_TENANT_ID=$tenantId
+                export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                cd terraform/platform
+                terraform init -backend-config=backend.hcl
+                terraform plan -out=tfplan
+                terraform apply -auto-approve tfplan
+
+  - stage: DeployDev
+    displayName: 'Deploy to dev'
+    dependsOn: Package
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+    jobs:
+      - deployment: DeployDev
+        environment: 'dev'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-steps.yml
+                  parameters:
+                    environmentName: 'dev'
+                    imageTag: '$(resolvedTag)'
+
+  - stage: DeployTest
+    displayName: 'Deploy to test'
+    dependsOn: Package
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/testing'))
+    jobs:
+      - deployment: DeployTest
+        environment: 'test'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-steps.yml
+                  parameters:
+                    environmentName: 'test'
+                    imageTag: '$(resolvedTag)'
+
+  - stage: DeployProd
+    displayName: 'Deploy to prod'
+    dependsOn: Package
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployProd
+        environment: 'prod'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-steps.yml
+                  parameters:
+                    environmentName: 'prod'
+                    imageTag: '$(resolvedTag)'

@@ -1,0 +1,26 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: devops-microservice
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+security:
+
+  api-key: ${API_KEY:2f5ae96c-b558-4c7b-a590-a501ae1c3f6c}
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-in-production-please-0123456789}
+    default-ttl-seconds: ${JWT_DEFAULT_TTL_SECONDS:60}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never

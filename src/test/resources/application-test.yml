@@ -1,0 +1,5 @@
+security:
+  api-key: test-api-key-2f5ae96c
+  jwt:
+    secret: test-secret-key-for-unit-tests-only-0123456789abcdef
+    default-ttl-seconds: 60
