@@ -48,11 +48,11 @@ steps:
         echo "Public IP:"
         kubectl get svc devops-microservice --namespace "${NAMESPACE}" \
           -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-      env:
-        ENVIRONMENT_NAME: '${{ parameters.environmentName }}'
-        IMAGE_TAG: '${{ parameters.imageTag }}'
-        ACR_LOGIN_SERVER: '$(acrLoginServer)'
-        AKS_RESOURCE_GROUP: '$(aksResourceGroup)'
-        AKS_NAME: '$(aksName)'
-        KEY_VAULT_NAME: '$(keyVaultName)'
-        API_KEY: '$(apiKey)'
+    env:
+      ENVIRONMENT_NAME: '${{ parameters.environmentName }}'
+      IMAGE_TAG: '${{ parameters.imageTag }}'
+      ACR_LOGIN_SERVER: '$(acrLoginServer)'
+      AKS_RESOURCE_GROUP: '$(aksResourceGroup)'
+      AKS_NAME: '$(aksName)'
+      KEY_VAULT_NAME: '$(keyVaultName)'
+      API_KEY: '$(apiKey)'
