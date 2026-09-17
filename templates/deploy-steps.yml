@@ -5,6 +5,7 @@ parameters:
     type: string
 
 steps:
+  - checkout: self
   - task: AzureCLI@2
     displayName: 'Deploy devops-microservice to ${{ parameters.environmentName }}'
     inputs:
