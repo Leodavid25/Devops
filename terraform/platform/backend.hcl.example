@@ -1,0 +1,7 @@
+# Copy this file to backend.hcl (gitignored) and fill in the real values
+# printed by `terraform output backend_hcl` in terraform/bootstrap, then run:
+#   terraform init -backend-config=backend.hcl
+resource_group_name  = "rg-devops-tfstate"
+storage_account_name = "sttfstatedevopsXXXXXX"
+container_name       = "tfstate"
+key                  = "platform.tfstate"
